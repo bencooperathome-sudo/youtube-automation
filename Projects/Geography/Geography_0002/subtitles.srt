@@ -1,0 +1,45 @@
+1
+00:00:00,000 --> 00:00:03,000
+This jellyfish can hit reset on aging and live again.
+
+2
+00:00:03,000 --> 00:00:06,000
+Meet Turritopsis dohrnii, the so-called immortal jellyfish found worldwide.
+
+3
+00:00:06,000 --> 00:00:09,000
+When stressed by injury, starvation, or age, it does something radical.
+
+4
+00:00:09,000 --> 00:00:12,000
+The adult medusa transforms back into a baby polyp, rewriting tissues.
+
+5
+00:00:12,000 --> 00:00:16,000
+Cells change identity in a process called
+transdifferentiation, like natural reprogramming.
+
+6
+00:00:16,000 --> 00:00:19,000
+From the polyp stage, it clones new adults and restarts the cycle.
+
+7
+00:00:19,000 --> 00:00:22,000
+Genes linked to DNA repair and stem-cell pathways
+stay unusually active.
+
+8
+00:00:22,000 --> 00:00:25,000
+It measures only a few millimeters across, making it hard to study.
+
+9
+00:00:25,000 --> 00:00:28,000
+Despite the nickname, predators, disease, and accidents can still kill it.
+
+10
+00:00:28,000 --> 00:00:31,000
+Scientists think its reset tricks could inspire anti-aging therapies.
+
+11
+00:00:31,000 --> 00:00:35,000
+If you could reboot your body like this jellyfish, would you, and why?

@@ -1,0 +1,15 @@
+You are an expert YouTube Shorts script writer.
+
+Your task is to create a 20–30 second YouTube Short.
+
+Requirements:
+
+• Start with an irresistible hook in the first sentence.
+• Keep every sentence under 15 words.
+• Build curiosity throughout.
+• Be scientifically accurate.
+• Explain simply enough for anyone to understand.
+• End with:
+"Follow for more science-backed fitness facts."
+
+Return only the narration.
