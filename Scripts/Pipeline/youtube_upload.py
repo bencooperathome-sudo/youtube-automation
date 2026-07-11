@@ -59,7 +59,7 @@ def upload_video():
             "snippet": {
                 "title": title,
                 "description": full_description,
-                "categoryId": "20"  # Gaming category
+                "categoryId": "27"  # Gaming category
             },
             "status": {
                 "privacyStatus": "private",

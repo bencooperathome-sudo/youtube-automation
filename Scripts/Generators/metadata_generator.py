@@ -10,20 +10,40 @@ with open(SCRIPT, "r", encoding="utf-8") as f:
     script = f.read()
 
 prompt = f"""
-Generate YouTube metadata for this WoW (World of Warcraft) fact video.
+Create YouTube metadata.
 
-Script:
+SCRIPT
+
 {script}
 
-Generate:
-1. A catchy, SEO-optimized TITLE (under 60 characters)
-2. A detailed DESCRIPTION (2-3 sentences, include WoW lore/game context)
-3. Relevant HASHTAGS (10-15 hashtags for WoW content)
+Generate
 
-Format your response exactly like this:
-TITLE: [Your title here]
-DESCRIPTION: [Your description here]
-HASHTAGS: [hashtag1] [hashtag2] [hashtag3] ...
+TITLE
+Under 60 characters.
+
+DESCRIPTION
+2–3 sentences.
+
+SEARCH KEYWORDS
+20 keywords separated by commas.
+
+HASHTAGS
+10 hashtags.
+
+PINNED COMMENT
+One engaging question encouraging comments.
+
+Return exactly
+
+TITLE:
+
+DESCRIPTION:
+
+KEYWORDS:
+
+HASHTAGS:
+
+PINNED COMMENT:
 """
 
 print("Generating metadata...")

@@ -1,104 +1,134 @@
 """
-Generate daily WoW facts for YouTube Shorts.
+Generate YouTube Shorts topics using OpenAI.
 """
 
-import random
 from pathlib import Path
+import sys
+import random
+
+# -------------------------------------------------------
+# Make project root importable
+# -------------------------------------------------------
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# -------------------------------------------------------
+# Imports
+# -------------------------------------------------------
 
 from openai import OpenAI
 
 from config import OPENAI_API_KEY
-from paths import OUTPUT_DIR
 from settings import MODEL, WOW_TOPICS
+from paths import OUTPUT_DIR
 
-
-# ----------------------------------------
+# -------------------------------------------------------
 # OpenAI Client
-# ----------------------------------------
+# -------------------------------------------------------
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# ----------------------------------------
-# Output file
-# ----------------------------------------
+# -------------------------------------------------------
+# Output File
+# -------------------------------------------------------
 
-output_file = Path(OUTPUT_DIR) / "topics.txt"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Make sure the output directory exists
-output_file.parent.mkdir(parents=True, exist_ok=True)
+TOPICS_FILE = OUTPUT_DIR / "topics.txt"
 
-# ----------------------------------------
-# Choose a random topic
-# ----------------------------------------
+# -------------------------------------------------------
+# Prompt Builder
+# -------------------------------------------------------
 
-selected_topic = random.choice(WOW_TOPICS)
+def build_prompt(topic: str) -> str:
 
-prompt = f"""
-Generate 5 viral, engaging World of Warcraft facts for YouTube Shorts.
+    return f"""
+Generate FIVE YouTube Shorts ideas.
 
-Topic:
-{selected_topic}
+CATEGORY
 
-Requirements:
-- Each fact should be a complete YouTube Short idea.
-- Amazing, surprising WoW facts.
-- Under 35 seconds of narration.
-- High curiosity and engagement.
-- Include lore, mechanics or little-known details.
-- One fact per line.
-- Format:
+{topic}
 
-[FACT]: [Engaging description]
+Rules
 
-Make every fact highly viral and interesting.
+- Every idea must be completely factual.
+- Every idea must be surprising.
+- Make viewers think "I never knew that."
+- Suitable for a 30–40 second YouTube Short.
+- One idea per line.
+- No numbering.
+- No explanations.
+- Avoid clickbait.
+- Avoid common facts.
 """
 
-print(f"Generating WoW topics for: {selected_topic}...")
+# -------------------------------------------------------
+# Topic Generation
+# -------------------------------------------------------
 
-# ----------------------------------------
-# Generate topics
-# ----------------------------------------
+def generate_topics():
 
-response = client.chat.completions.create(
-    model=MODEL,
-    messages=[
-        {
-            "role": "user",
-            "content": prompt,
-        }
-    ],
-)
+    selected_topic = random.choice(WOW_TOPICS)
 
-topics = response.choices[0].message.content
+    print("=" * 60)
+    print("Generating Topics")
+    print("=" * 60)
+    print(f"Category: {selected_topic}")
 
-if not topics:
-    raise RuntimeError("OpenAI returned no content.")
+    prompt = build_prompt(selected_topic)
 
-# ----------------------------------------
-# Save file
-# ----------------------------------------
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
 
-output_file.write_text(topics, encoding="utf-8")
+    topics = response.choices[0].message.content
 
-print(f"✅ Topics saved to: {output_file}")
+    if not topics:
+        raise RuntimeError("OpenAI returned no topics.")
 
-print("Step 1 - Imports successful")
-print("Step 2 - Client created")
-print("Step 3 - Prompt created")
+    TOPICS_FILE.write_text(
+        topics.strip(),
+        encoding="utf-8"
+    )
 
-response = client.chat.completions.create(
-    model=MODEL,
-    messages=[
-        {"role": "user", "content": prompt}
-    ],
-)
+    print()
+    print("Generated topics:")
+    print("----------------------------")
+    print(topics)
+    print("----------------------------")
+    print()
+    print(f"Saved to:")
+    print(TOPICS_FILE)
 
-print("Step 4 - OpenAI responded")
+    return topics
 
-topics = response.choices[0].message.content
 
-print("Step 5 - Topics extracted")
+# -------------------------------------------------------
+# Main
+# -------------------------------------------------------
 
-output_file.write_text(topics, encoding="utf-8")
+if __name__ == "__main__":
 
-print("Step 6 - File saved")
+    try:
+
+        generate_topics()
+
+        print()
+        print("Topic generation completed successfully.")
+
+    except Exception as e:
+
+        print()
+        print("Topic generation failed.")
+        print(e)
+
+        raise
