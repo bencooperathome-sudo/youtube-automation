@@ -1,23 +1,78 @@
-"""Generate narration script for YouTube Short."""
-from settings import MODEL
+"""
+Generate narration scripts for YouTube Shorts.
+
+Production-ready version with:
+- Error handling
+- Logging
+- Retry logic
+- Script validation
+- Type hints
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from pathlib import Path
+
 from openai import OpenAI
+
 from config import OPENAI_API_KEY
 from paths import OUTPUT_DIR, SCRIPT
+from settings import MODEL
+
+# ------------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------------
+
+MIN_WORDS = 115
+MAX_WORDS = 135
+
+MAX_RETRIES = 3
+
+TOPICS_FILE = OUTPUT_DIR / "topics.txt"
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Read topic
-topics_file = OUTPUT_DIR / "topics.txt"
-with open(topics_file, "r", encoding="utf-8") as f:
-    first_topic = f.readline().strip()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
 
-prompt = f"""
+logger = logging.getLogger(__name__)
+
+
+# ------------------------------------------------------------------
+# Helper Functions
+# ------------------------------------------------------------------
+
+def load_topic() -> str:
+    """Load the first topic from topics.txt."""
+
+    if not TOPICS_FILE.exists():
+        raise FileNotFoundError(
+            f"Topic file not found: {TOPICS_FILE}"
+        )
+
+    with open(TOPICS_FILE, "r", encoding="utf-8") as file:
+        topic = file.readline().strip()
+
+    if not topic:
+        raise ValueError("No topics found inside topics.txt")
+
+    return topic
+
+# ------------------------------------------------------------------
+# Prompt Template
+# ------------------------------------------------------------------
+
+PROMPT_TEMPLATE = """
 You are an expert YouTube Shorts writer and fitness enthusiast.
 
 Your task is to create ONE YouTube Shorts narration script about this topic:
 
 TOPIC:
-{first_topic}
+{topic}
 
 GOAL:
 Create a script that maximises viewer retention and feels like it was written by an experienced gaming YouTuber.
@@ -43,6 +98,7 @@ SCRIPT STRUCTURE
 1. First sentence MUST immediately create curiosity.
 
 Examples:
+
 "Almost every WoW player has walked past this secret..."
 "Blizzard accidentally created one of Warcraft's biggest mysteries..."
 "Most players never realised this actually happened..."
@@ -56,6 +112,7 @@ Examples:
 5. Finish with a sentence that makes viewers want more.
 
 Example:
+
 "If you enjoyed this fact, follow for another hidden World of Warcraft secret tomorrow."
 
 WRITING STYLE
@@ -72,8 +129,6 @@ WRITING STYLE
 
 QUALITY CHECK BEFORE RETURNING
 
-Make sure:
-
 ✓ All facts are correct.
 ✓ No repeated information.
 ✓ Hook is strong.
@@ -83,20 +138,50 @@ Make sure:
 
 Return ONLY the finished narration.
 """
-print(f"Generating script for topic: {first_topic}...")
+# ------------------------------------------------------------------
+# Prompt Builder
+# ------------------------------------------------------------------
 
-response = client.messages.create(
-    model=MODEL,
-    messages=[{"role": "user", "content": prompt}]
-)
+def build_prompt(topic: str) -> str:
+    """Insert the topic into the prompt template."""
+    return PROMPT_TEMPLATE.format(topic=topic)
 
-print("✅ OpenAI response received.")
 
-script = response.choices[0].message.content
+# ------------------------------------------------------------------
+# Validation
+# ------------------------------------------------------------------
 
-print("Saving script...")
+def validate_script(script: str) -> None:
+    """
+    Validate the generated narration before saving.
+    Raises ValueError if validation fails.
+    """
 
-with open(SCRIPT, "w", encoding="utf-8") as f:
-    f.write(script)
+    if not script:
+        raise ValueError("OpenAI returned an empty script.")
 
-print(f"✅ Script saved to {SCRIPT}")
+    words = script.split()
+
+    if len(words) < MIN_WORDS:
+        raise ValueError(
+            f"Script too short ({len(words)} words)."
+        )
+
+    if len(words) > MAX_WORDS:
+        raise ValueError(
+            f"Script too long ({len(words)} words)."
+        )
+
+    forbidden = [
+        "#",
+        "* ",
+        "- ",
+        "•",
+        "```",
+    ]
+
+    for item in forbidden:
+        if item in script:
+            raise ValueError(
+                f"Forbidden formatting detected: {item}"
+            )

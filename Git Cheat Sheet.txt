@@ -1,0 +1,28 @@
+Daily Git Workflow
+
+1. Check status
+git status
+
+2. Stage changes
+git add .
+
+3. Commit changes
+git commit -m "Describe what changed"
+
+4. Upload to GitHub
+git push
+
+-------------------------------------
+
+Download latest changes
+git pull
+
+-------------------------------------
+
+View commit history
+git log --oneline
+
+-------------------------------------
+
+Undo uncommitted changes
+git restore filename.py

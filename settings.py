@@ -11,7 +11,20 @@ VIDEO_HEIGHT = 1920
 VIDEO_FPS = 30
 
 # Content Type (can be 'wow', 'fitness', 'geography', etc.)
-CONTENT_TYPE = "wow"
+CONTENT_TYPE = "facts"
+
+FACT_CATEGORIES = [
+    "Science",
+    "History",
+    "Space",
+    "Nature",
+    "Geography",
+    "Technology",
+    "Psychology",
+    "Human Body",
+    "Animals",
+    "Economics"
+]
 
 # WoW-Specific Settings
 WOW_TOPICS = [
