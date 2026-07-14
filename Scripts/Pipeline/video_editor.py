@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from moviepy import AudioFileClip, VideoFileClip, concatenate_videoclips
+from moviepy import AudioFileClip, VideoFileClip, concatenate_videoclips, vfx
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -109,9 +109,12 @@ def main() -> None:
         audio = AudioFileClip(str(VOICE))
 
         if video.duration < audio.duration:
-            raise RuntimeError(
-                "Footage is shorter than the narration. "
-                "Create a longer shot plan or download longer clips."
+            print(
+                "Footage is shorter than the narration; "
+                "looping footage to match the audio."
+            )
+            video = video.with_effects(
+                [vfx.Loop(duration=audio.duration)]
             )
 
         video = video.subclipped(0, audio.duration).with_audio(audio)
