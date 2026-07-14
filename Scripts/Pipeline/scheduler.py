@@ -1,111 +1,93 @@
-"""Daily scheduler for automated YouTube Shorts generation."""
-import schedule
-import time
+"""Run the YouTube automation pipeline once per day."""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
 import sys
-import logging
+import time
 from datetime import datetime
 from pathlib import Path
 
-# Setup logging
-log_dir = Path("Logs")
-log_dir.mkdir(exist_ok=True)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_dir / f"scheduler_{datetime.now().strftime('%Y%m%d')}.log"),
-        logging.StreamHandler()
-    ]
-)
-
-logger = logging.getLogger(__name__)
+import schedule
 
 
-def job():
-    """Job to run the YouTube Shorts pipeline daily."""
-    logger.info("=" * 60)
-    logger.info("🎬 Daily WoW Facts Video Generation Started")
-    logger.info("=" * 60)
-    
-    import subprocess
-    
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MAIN_FILE = PROJECT_ROOT / "main.py"
+
+
+def run_pipeline(upload: bool) -> None:
+    """Start one new production run."""
+
+    command = [sys.executable, str(MAIN_FILE)]
+
+    if upload:
+        command.append("--upload")
+
+    print(
+        f"{datetime.now():%Y-%m-%d %H:%M:%S} | "
+        "Starting scheduled pipeline run."
+    )
+
+    result = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
+
+    if result.returncode == 0:
+        print("Scheduled pipeline run completed successfully.")
+    else:
+        print(f"Scheduled pipeline run failed with code {result.returncode}.")
+
+
+def validate_time(value: str) -> str:
     try:
-        # Run the main pipeline
-        result = subprocess.run(
-            [sys.executable, "main.py"],
-            check=True,
-            capture_output=False
-        )
-        
-        logger.info("✅ Daily video generation completed successfully!")
-        
-    except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Daily video generation failed: {e}")
-    except Exception as e:
-        logger.error(f"❌ Unexpected error in scheduler: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        datetime.strptime(value, "%H:%M")
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "Time must use 24-hour HH:MM format, for example 09:00."
+        ) from error
+
+    return value
 
 
-def schedule_jobs(time_str="09:00", upload=False):
-    """
-    Schedule daily jobs.
-    
-    Args:
-        time_str: Time in HH:MM format (24-hour) when to run the job
-        upload: Whether to upload to YouTube
-    """
-    
-    logger.info(f"📅 Scheduler configured to run daily at {time_str}")
-    logger.info(f"📤 YouTube upload: {'Enabled' if upload else 'Disabled'}")
-    
-    # Schedule the job
-    schedule.every().day.at(time_str).do(job)
-    
-    logger.info("✅ Scheduler started. Waiting for scheduled time...")
-    
-    # Keep scheduler running
-    while True:
-        try:
-            schedule.run_pending()
-            time.sleep(60)  # Check every minute
-        except KeyboardInterrupt:
-            logger.info("\n📴 Scheduler stopped by user")
-            break
-        except Exception as e:
-            logger.error(f"Error in scheduler loop: {e}")
-            time.sleep(60)
-
-
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="YouTube Shorts Daily Scheduler")
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Schedule one YouTube Shorts production run per day."
+    )
     parser.add_argument(
         "--time",
-        default="09:00",
-        help="Time to run daily (HH:MM format, 24-hour). Default: 09:00"
+        required=True,
+        type=validate_time,
+        help="Daily time in 24-hour HH:MM format.",
     )
     parser.add_argument(
         "--upload",
         action="store_true",
-        help="Upload videos to YouTube"
+        help="Upload the finished video after the production run.",
     )
-    
+    parser.add_argument(
+        "--run-now",
+        action="store_true",
+        help="Run once immediately before starting the daily schedule.",
+    )
+
     args = parser.parse_args()
-    
-    # Validate time format
-    try:
-        datetime.strptime(args.time, "%H:%M")
-    except ValueError:
-        logger.error(f"Invalid time format: {args.time}. Use HH:MM format (24-hour)")
-        sys.exit(1)
-    
-    try:
-        schedule_jobs(time_str=args.time, upload=args.upload)
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        sys.exit(1)
+
+    if args.run_now:
+        run_pipeline(upload=args.upload)
+
+    schedule.every().day.at(args.time).do(
+        run_pipeline,
+        upload=args.upload,
+    )
+
+    print(
+        f"Scheduler running. Daily time: {args.time}. "
+        "Keep this terminal window open."
+    )
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()

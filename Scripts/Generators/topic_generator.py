@@ -1,134 +1,102 @@
-"""
-Generate YouTube Shorts topics using OpenAI.
-"""
+"""Generate general-interest fact topics for YouTube Shorts."""
 
-from pathlib import Path
-import sys
+from __future__ import annotations
+
+import json
+import os
 import random
+import sys
+from pathlib import Path
 
-# -------------------------------------------------------
-# Make project root importable
-# -------------------------------------------------------
+from dotenv import load_dotenv
+from openai import OpenAI
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# -------------------------------------------------------
-# Imports
-# -------------------------------------------------------
+from paths import OUTPUT_DIR, TOPICS_FILE
+from settings import CONTENT_REQUIREMENTS, FACT_CATEGORIES, MODEL
 
-from openai import OpenAI
 
-from config import OPENAI_API_KEY
-from settings import MODEL, WOW_TOPICS
-from paths import OUTPUT_DIR
+def get_client() -> OpenAI:
+    load_dotenv(PROJECT_ROOT / ".env")
+    api_key = os.getenv("OPENAI_API_KEY")
 
-# -------------------------------------------------------
-# OpenAI Client
-# -------------------------------------------------------
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is missing from .env.")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+    return OpenAI(api_key=api_key)
 
-# -------------------------------------------------------
-# Output File
-# -------------------------------------------------------
 
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+def main() -> None:
+    category = random.choice(FACT_CATEGORIES)
 
-TOPICS_FILE = OUTPUT_DIR / "topics.txt"
+    prompt = f"""
+Generate exactly five original YouTube Shorts topic ideas.
 
-# -------------------------------------------------------
-# Prompt Builder
-# -------------------------------------------------------
+Category: {category}
 
-def build_prompt(topic: str) -> str:
+Channel requirements:
+{chr(10).join(f"- {item}" for item in CONTENT_REQUIREMENTS)}
 
-    return f"""
-Generate FIVE YouTube Shorts ideas.
+Return valid JSON only:
 
-CATEGORY
+{{
+  "topics": [
+    "One specific, surprising, factual video topic",
+    "..."
+  ]
+}}
 
-{topic}
+Rules:
+- Every topic must focus on one interesting fact or discovery.
+- Avoid World of Warcraft, gaming-specific content, politics, and advice.
+- Avoid vague topics such as "interesting space facts".
+- Make each topic specific enough for a 35-second video.
+- Do not number the topics.
+""".strip()
 
-Rules
-
-- Every idea must be completely factual.
-- Every idea must be surprising.
-- Make viewers think "I never knew that."
-- Suitable for a 30–40 second YouTube Short.
-- One idea per line.
-- No numbering.
-- No explanations.
-- Avoid clickbait.
-- Avoid common facts.
-"""
-
-# -------------------------------------------------------
-# Topic Generation
-# -------------------------------------------------------
-
-def generate_topics():
-
-    selected_topic = random.choice(WOW_TOPICS)
-
-    print("=" * 60)
-    print("Generating Topics")
-    print("=" * 60)
-    print(f"Category: {selected_topic}")
-
-    prompt = build_prompt(selected_topic)
-
-    response = client.chat.completions.create(
+    response = get_client().responses.create(
         model=MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
+        input=prompt,
+        text={"format": {"type": "json_object"}},
+        max_output_tokens=500,
     )
 
-    topics = response.choices[0].message.content
+    data = json.loads(response.output_text)
+    topics = data.get("topics", [])
 
-    if not topics:
-        raise RuntimeError("OpenAI returned no topics.")
+    if not isinstance(topics, list) or len(topics) != 5:
+        raise RuntimeError("Topic generator did not return exactly five topics.")
+
+    clean_topics = [str(topic).strip() for topic in topics if str(topic).strip()]
+
+    if len(clean_topics) != 5:
+        raise RuntimeError("Topic generator returned empty topics.")
 
     TOPICS_FILE.write_text(
-        topics.strip(),
-        encoding="utf-8"
+        "\n".join(clean_topics) + "\n",
+        encoding="utf-8",
     )
 
-    print()
+    (OUTPUT_DIR / "topic_candidates.json").write_text(
+        json.dumps(
+            {"category": category, "topics": clean_topics},
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    print(f"Category: {category}\n")
     print("Generated topics:")
-    print("----------------------------")
-    print(topics)
-    print("----------------------------")
-    print()
-    print(f"Saved to:")
-    print(TOPICS_FILE)
+    for number, topic in enumerate(clean_topics, start=1):
+        print(f"{number}. {topic}")
 
-    return topics
+    print(f"\nSaved to: {TOPICS_FILE}")
 
-
-# -------------------------------------------------------
-# Main
-# -------------------------------------------------------
 
 if __name__ == "__main__":
-
-    try:
-
-        generate_topics()
-
-        print()
-        print("Topic generation completed successfully.")
-
-    except Exception as e:
-
-        print()
-        print("Topic generation failed.")
-        print(e)
-
-        raise
+    main()

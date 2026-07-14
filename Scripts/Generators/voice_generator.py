@@ -1,25 +1,61 @@
-"""Generate voice narration using OpenAI TTS."""
+"""Generate AI narration audio from the approved script."""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
 from openai import OpenAI
-from config import OPENAI_API_KEY
-from settings import VOICE
-from paths import SCRIPT, VOICE as VOICE_OUTPUT
 
-client = OpenAI(api_key=OPENAI_API_KEY)
 
-print("Loading script...")
-with open(SCRIPT, "r", encoding="utf-8") as f:
-    script = f.read()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-print("✅ Script loaded!")
-print("Generating voice...")
+from paths import OUTPUT_DIR, SCRIPT, VOICE
+from settings import VOICE as VOICE_NAME
 
-response = client.audio.speech.create(
-    model="tts-1",
-    voice=VOICE,
-    input=script,
-)
 
-print("Voice generated!")
-response.write_to_file(VOICE_OUTPUT)
+def main() -> None:
+    load_dotenv(PROJECT_ROOT / ".env")
+    api_key = os.getenv("OPENAI_API_KEY")
 
-print(f"✅ Voice saved to {VOICE_OUTPUT}")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is missing from .env.")
+
+    if not SCRIPT.exists():
+        raise FileNotFoundError(f"Script not found: {SCRIPT}")
+
+    narration = SCRIPT.read_text(encoding="utf-8").strip()
+
+    if not narration:
+        raise ValueError("Script is empty.")
+
+    client = OpenAI(api_key=api_key)
+
+    print("Generating AI narration...")
+
+    with client.audio.speech.with_streaming_response.create(
+        model="gpt-4o-mini-tts",
+        voice=VOICE_NAME,
+        input=narration,
+        instructions=(
+            "Speak clearly, warmly, and confidently. "
+            "Use an engaging but natural pace for a short facts video."
+        ),
+        response_format="mp3",
+    ) as response:
+        response.stream_to_file(VOICE)
+
+    (OUTPUT_DIR / "ai_voice_disclosure.txt").write_text(
+        "This video uses an AI-generated voice.\n",
+        encoding="utf-8",
+    )
+
+    print(f"Narration saved to: {VOICE}")
+
+
+if __name__ == "__main__":
+    main()

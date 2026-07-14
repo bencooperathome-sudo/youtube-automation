@@ -1,39 +1,40 @@
-"""Settings and models for YouTube Shorts generation."""
+"""Settings for the automated Interesting Facts YouTube Shorts channel."""
 
-# OpenAI Configuration
+# OpenAI
 MODEL = "gpt-4o-mini"
-VOICE = "alloy"  # Options: alloy, echo, fused, onyx, nova, shimmer
+VOICE = "alloy"
+IMAGE_MODEL = "gpt-image-2"
 
-# Video Configuration
+# Video format
 VIDEO_DURATION_SECONDS = 35
 VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 VIDEO_FPS = 30
 
-# Content Type (can be 'wow', 'fitness', 'geography', etc.)
-CONTENT_TYPE = "facts"
+# Channel direction
+CONTENT_TYPE = "interesting_facts"
+TARGET_AUDIENCE = "Curious viewers looking for short, surprising, accurate facts."
 
+# Categories used by the topic generator
 FACT_CATEGORIES = [
-    "Science",
-    "History",
-    "Space",
-    "Nature",
-    "Geography",
-    "Technology",
-    "Psychology",
-    "Human Body",
-    "Animals",
-    "Economics"
+    "Science and surprising discoveries",
+    "Space and astronomy",
+    "Human body and health facts",
+    "Animals and nature",
+    "World history",
+    "Geography and unusual places",
+    "Psychology and human behaviour",
+    "Technology and inventions",
+    "Food and culture",
+    "Everyday objects and hidden history",
 ]
 
-# WoW-Specific Settings
-WOW_TOPICS = [
-    "World of Warcraft lore",
-    "WoW raids and dungeons",
-    "WoW character builds",
-    "WoW economy and gold making",
-    "WoW PvP strategies",
-    "WoW expansions history",
-    "WoW Easter eggs",
-    "WoW achievements",
+# Content rules used by future pipeline stages
+CONTENT_REQUIREMENTS = [
+    "Prioritise accurate and verifiable facts.",
+    "Avoid medical, financial, or legal advice.",
+    "Avoid divisive political topics.",
+    "Avoid graphic, disturbing, or sensational content.",
+    "Explain one interesting idea clearly in each video.",
+    "Use simple language suitable for a broad audience.",
 ]

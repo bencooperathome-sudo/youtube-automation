@@ -1,81 +1,167 @@
-"""Generate metadata (title, description, hashtags) for YouTube video."""
-from openai import OpenAI
-from config import OPENAI_API_KEY
+"""Create YouTube title, description, keywords, hashtags, and pinned comment."""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import sys
+import time
+from pathlib import Path
+
+from dotenv import load_dotenv
+from openai import APIError, APITimeoutError, OpenAI, RateLimitError
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from paths import DESCRIPTION, HASHTAGS, KEYWORDS, PINNED_COMMENT, SCRIPT, TITLE
 from settings import MODEL
-from paths import SCRIPT, TITLE, DESCRIPTION, HASHTAGS
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+MAX_RETRIES = 3
 
-with open(SCRIPT, "r", encoding="utf-8") as f:
-    script = f.read()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-prompt = f"""
-Create YouTube metadata.
 
-SCRIPT
+def get_client() -> OpenAI:
+    load_dotenv(PROJECT_ROOT / ".env")
 
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is missing from the .env file.")
+
+    return OpenAI(
+        api_key=api_key,
+        timeout=90.0,
+        max_retries=2,
+    )
+
+
+def load_script() -> str:
+    if not SCRIPT.exists():
+        raise FileNotFoundError(
+            f"Script not found: {SCRIPT}. Run script_generator.py first."
+        )
+
+    script = SCRIPT.read_text(encoding="utf-8").strip()
+
+    if not script:
+        raise ValueError("The narration script is empty.")
+
+    return script
+
+
+def validate_metadata(metadata: dict) -> None:
+    for name in ("title", "description", "pinned_comment"):
+        if not isinstance(metadata.get(name), str) or not metadata[name].strip():
+            raise ValueError(f"Metadata field '{name}' is missing or empty.")
+
+    if len(metadata["title"]) > 60:
+        raise ValueError("Title exceeds YouTube's 60-character target.")
+
+    for name in ("keywords", "hashtags"):
+        if not isinstance(metadata.get(name), list) or not metadata[name]:
+            raise ValueError(f"Metadata list '{name}' is missing or empty.")
+
+
+def generate_metadata(client: OpenAI, script: str) -> dict:
+    prompt = f"""
+Create accurate, engaging YouTube Shorts metadata for this narration.
+
+NARRATION:
 {script}
 
-Generate
+Return valid JSON only in this format:
 
-TITLE
-Under 60 characters.
+{{
+  "title": "Title under 60 characters",
+  "description": "Two concise sentences, including a natural call to action.",
+  "keywords": ["keyword one", "keyword two"],
+  "hashtags": ["#InterestingFacts", "#Science"],
+  "pinned_comment": "One friendly question encouraging viewers to comment."
+}}
 
-DESCRIPTION
-2–3 sentences.
+Rules:
+- Make no claim that is not supported by the narration.
+- Avoid misleading clickbait.
+- Provide 8 to 12 keywords.
+- Provide 3 to 5 hashtags.
+- Do not use World of Warcraft, gaming, or unrelated hashtags.
+""".strip()
 
-SEARCH KEYWORDS
-20 keywords separated by commas.
+    last_error: Exception | None = None
 
-HASHTAGS
-10 hashtags.
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = client.responses.create(
+                model=MODEL,
+                input=prompt,
+                text={"format": {"type": "json_object"}},
+                max_output_tokens=700,
+            )
 
-PINNED COMMENT
-One engaging question encouraging comments.
+            metadata = json.loads(response.output_text)
+            validate_metadata(metadata)
+            return metadata
 
-Return exactly
+        except (
+            APIError,
+            APITimeoutError,
+            RateLimitError,
+            json.JSONDecodeError,
+            ValueError,
+        ) as error:
+            last_error = error
+            wait_seconds = attempt * 5
 
-TITLE:
+            logger.warning(
+                "Metadata attempt %s/%s failed: %s. Retrying in %s seconds.",
+                attempt,
+                MAX_RETRIES,
+                error,
+                wait_seconds,
+            )
 
-DESCRIPTION:
+            time.sleep(wait_seconds)
 
-KEYWORDS:
-
-HASHTAGS:
-
-PINNED COMMENT:
-"""
-
-print("Generating metadata...")
-
-response = client.messages.create(
-    model=MODEL,
-    messages=[{"role": "user", "content": prompt}]
-)
-
-metadata = response.choices[0].message.content
-
-# Parse metadata
-lines = metadata.strip().split("\n")
-title_line = next((l for l in lines if l.startswith("TITLE:")), "").replace("TITLE:", "").strip()
-desc_line = next((l for l in lines if l.startswith("DESCRIPTION:")), "").replace("DESCRIPTION:", "").strip()
-tags_line = next((l for l in lines if l.startswith("HASHTAGS:")), "").replace("HASHTAGS:", "").strip()
-
-print("Saving metadata...")
-
-with open(TITLE, "w", encoding="utf-8") as f:
-    f.write(title_line)
-
-with open(DESCRIPTION, "w", encoding="utf-8") as f:
-    f.write(desc_line)
-
-with open(HASHTAGS, "w", encoding="utf-8") as f:
-    f.write(tags_line)
-
-print(f"✅ Metadata saved!")
-print(f"Title: {title_line}")
-print(f"Description: {desc_line}")
-print(f"Hashtags: {tags_line}")
+    raise RuntimeError(
+        f"Could not generate metadata after {MAX_RETRIES} attempts."
+    ) from last_error
 
 
+def main() -> None:
+    logger.info("Starting metadata generation.")
 
+    metadata = generate_metadata(get_client(), load_script())
+
+    TITLE.write_text(metadata["title"].strip() + "\n", encoding="utf-8")
+    DESCRIPTION.write_text(
+        metadata["description"].strip() + "\n",
+        encoding="utf-8",
+    )
+    KEYWORDS.write_text(
+        ", ".join(str(item).strip() for item in metadata["keywords"]) + "\n",
+        encoding="utf-8",
+    )
+    HASHTAGS.write_text(
+        " ".join(str(item).strip() for item in metadata["hashtags"]) + "\n",
+        encoding="utf-8",
+    )
+    PINNED_COMMENT.write_text(
+        metadata["pinned_comment"].strip() + "\n",
+        encoding="utf-8",
+    )
+
+    logger.info("Metadata saved to: %s", TITLE.parent)
+    print(f"\nTitle: {metadata['title']}")
+    print(f"Hashtags: {' '.join(metadata['hashtags'])}")
+
+
+if __name__ == "__main__":
+    main()

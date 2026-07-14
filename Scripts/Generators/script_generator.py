@@ -1,187 +1,173 @@
 """
-Generate narration scripts for YouTube Shorts.
-
-Production-ready version with:
-- Error handling
-- Logging
-- Retry logic
-- Script validation
-- Type hints
+Generate the narration script for the current YouTube Shorts run.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import time
 from pathlib import Path
 
-from openai import OpenAI
+from dotenv import load_dotenv
+from openai import APIError, APITimeoutError, OpenAI, RateLimitError
 
-from config import OPENAI_API_KEY
-from paths import OUTPUT_DIR, SCRIPT
-from settings import MODEL
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# ------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-MIN_WORDS = 115
-MAX_WORDS = 135
+from paths import SCRIPT, TOPICS_FILE
+from settings import MODEL, VIDEO_DURATION_SECONDS
 
+MIN_WORDS = 75
+MAX_WORDS = 95
 MAX_RETRIES = 3
-
-TOPICS_FILE = OUTPUT_DIR / "topics.txt"
-
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
-
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------------------------------------------
-# Helper Functions
-# ------------------------------------------------------------------
+def get_client() -> OpenAI:
+    load_dotenv(PROJECT_ROOT / ".env")
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is missing from the project's .env file."
+        )
+
+    return OpenAI(api_key=api_key)
+
 
 def load_topic() -> str:
-    """Load the first topic from topics.txt."""
-
     if not TOPICS_FILE.exists():
         raise FileNotFoundError(
-            f"Topic file not found: {TOPICS_FILE}"
+            f"Topics file not found: {TOPICS_FILE}. "
+            "Run topic_generator.py first."
         )
 
-    with open(TOPICS_FILE, "r", encoding="utf-8") as file:
-        topic = file.readline().strip()
+    for line in TOPICS_FILE.read_text(encoding="utf-8").splitlines():
+        topic = line.strip().lstrip("-•0123456789. ").strip()
+        if topic:
+            return topic
 
-    if not topic:
-        raise ValueError("No topics found inside topics.txt")
-
-    return topic
-
-# ------------------------------------------------------------------
-# Prompt Template
-# ------------------------------------------------------------------
-
-PROMPT_TEMPLATE = """
-You are an expert YouTube Shorts writer and fitness enthusiast.
-
-Your task is to create ONE YouTube Shorts narration script about this topic:
-
-TOPIC:
-{topic}
-
-GOAL:
-Create a script that maximises viewer retention and feels like it was written by an experienced gaming YouTuber.
-
-STRICT REQUIREMENTS
-
-• Between 115 and 135 words.
-• Around 30-35 seconds of narration.
-• Every fact MUST be historically accurate according to official Blizzard lore or documented game mechanics.
-• Never invent facts.
-• Never speculate.
-• Never use clickbait that is factually incorrect.
-• Use conversational spoken English.
-• No bullet points.
-• No markdown.
-• No emojis.
-• No scene directions.
-• No timestamps.
-• Output ONLY the narration.
-
-SCRIPT STRUCTURE
-
-1. First sentence MUST immediately create curiosity.
-
-Examples:
-
-"Almost every WoW player has walked past this secret..."
-"Blizzard accidentally created one of Warcraft's biggest mysteries..."
-"Most players never realised this actually happened..."
-
-2. Explain the background in one or two short sentences.
-
-3. Reveal the surprising fact.
-
-4. Explain why this matters in Warcraft lore or gameplay.
-
-5. Finish with a sentence that makes viewers want more.
-
-Example:
-
-"If you enjoyed this fact, follow for another hidden World of Warcraft secret tomorrow."
-
-WRITING STYLE
-
-• Fast paced.
-• High curiosity.
-• Every sentence should encourage watching the next.
-• Avoid repeating information.
-• Sound like a knowledgeable gamer.
-• Keep sentences short.
-• Vary sentence length.
-• Use vivid language.
-• Avoid filler words.
-
-QUALITY CHECK BEFORE RETURNING
-
-✓ All facts are correct.
-✓ No repeated information.
-✓ Hook is strong.
-✓ Easy for AI voice narration.
-✓ Suitable for subtitles.
-✓ Suitable for YouTube Shorts.
-
-Return ONLY the finished narration.
-"""
-# ------------------------------------------------------------------
-# Prompt Builder
-# ------------------------------------------------------------------
-
-def build_prompt(topic: str) -> str:
-    """Insert the topic into the prompt template."""
-    return PROMPT_TEMPLATE.format(topic=topic)
+    raise ValueError(f"No usable topic was found in {TOPICS_FILE}.")
 
 
-# ------------------------------------------------------------------
-# Validation
-# ------------------------------------------------------------------
+def build_instructions() -> str:
+    return f"""
+You write accurate, compelling YouTube Shorts narration about interesting facts.
+
+Write one narration script about the supplied topic.
+
+Requirements:
+- {MIN_WORDS} to {MAX_WORDS} words.
+- Target about {VIDEO_DURATION_SECONDS} seconds for a vertical YouTube Short.
+- Begin with a strong but truthful hook.
+- Use clear, conversational British English.
+- Keep sentences short and easy to narrate.
+- Explain one genuinely interesting fact with useful context.
+- Do not invent, exaggerate, speculate, or present uncertainty as fact.
+- Avoid World of Warcraft, gaming-specific content, politics, and advice.
+- Do not use bullet points, headings, markdown, emojis, timestamps,
+  citations, scene directions, or labels.
+- End with a natural call to action, such as:
+  "Follow for more surprising facts."
+
+Return only the narration script.
+""".strip()
+
 
 def validate_script(script: str) -> None:
-    """
-    Validate the generated narration before saving.
-    Raises ValueError if validation fails.
-    """
+    if not script.strip():
+        raise ValueError("The generated script was empty.")
 
-    if not script:
-        raise ValueError("OpenAI returned an empty script.")
-
-    words = script.split()
-
-    if len(words) < MIN_WORDS:
+    word_count = len(script.split())
+    if not MIN_WORDS <= word_count <= MAX_WORDS:
         raise ValueError(
-            f"Script too short ({len(words)} words)."
+            f"Script has {word_count} words; expected "
+            f"{MIN_WORDS} to {MAX_WORDS}."
         )
 
-    if len(words) > MAX_WORDS:
-        raise ValueError(
-            f"Script too long ({len(words)} words)."
-        )
+    forbidden_markers = ("```", "#", "•", "\n-", "\n*", "Title:", "Script:")
+    for marker in forbidden_markers:
+        if marker in script:
+            raise ValueError(f"Script contains forbidden formatting: {marker}")
 
-    forbidden = [
-        "#",
-        "* ",
-        "- ",
-        "•",
-        "```",
-    ]
 
-    for item in forbidden:
-        if item in script:
-            raise ValueError(
-                f"Forbidden formatting detected: {item}"
+def generate_script(client: OpenAI, topic: str) -> str:
+    last_error: Exception | None = None
+    feedback = ""
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = client.responses.create(
+                model=MODEL,
+                instructions=build_instructions(),
+                input=(
+                    f"Topic: {topic}\n\n"
+                    f"{feedback}"
+                    "Write the finished narration now."
+                ),
+                max_output_tokens=350,
             )
+
+            script = response.output_text.strip()
+            validate_script(script)
+            return script
+
+        except (APIError, APITimeoutError, RateLimitError) as error:
+            last_error = error
+            wait_seconds = attempt * 3
+            logger.warning(
+                "OpenAI request failed (attempt %s/%s): %s. Retrying in %s seconds.",
+                attempt,
+                MAX_RETRIES,
+                error,
+                wait_seconds,
+            )
+            time.sleep(wait_seconds)
+
+        except ValueError as error:
+            last_error = error
+            feedback = (
+                f"The previous draft was rejected because: {error}\n"
+                "Rewrite it and obey every requirement exactly.\n\n"
+            )
+            logger.warning(
+                "Generated draft rejected (attempt %s/%s): %s",
+                attempt,
+                MAX_RETRIES,
+                error,
+            )
+
+    raise RuntimeError(
+        f"Could not generate a valid script after {MAX_RETRIES} attempts."
+    ) from last_error
+
+
+def main() -> None:
+    logger.info("Starting script generation.")
+
+    topic = load_topic()
+    logger.info("Using topic: %s", topic)
+
+    script = generate_script(get_client(), topic)
+
+    temporary_file = SCRIPT.with_suffix(".tmp")
+    temporary_file.write_text(script + "\n", encoding="utf-8")
+    temporary_file.replace(SCRIPT)
+
+    logger.info("Script saved to: %s", SCRIPT)
+
+    print("\nGenerated script:\n")
+    print(script)
+
+
+if __name__ == "__main__":
+    main()
