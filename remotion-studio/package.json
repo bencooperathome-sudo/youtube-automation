@@ -1,0 +1,15 @@
+{
+  "name": "train-athlete-remotion-evaluation",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "render:smoke": "remotion render src/index.ts TrainAthleteToolSmoke out/train-athlete-tool-smoke.mp4",
+    "studio": "remotion studio src/index.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.545",
+    "remotion": "4.0.545",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
