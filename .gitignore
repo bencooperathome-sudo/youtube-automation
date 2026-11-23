@@ -98,6 +98,8 @@ dist/
 # Secrets
 # ------------------------------------------------------
 
+/client_secret.json
+/youtube_token.json
 *.pem
 *.key
 *.crt
